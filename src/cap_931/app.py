@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 from cap_931.web_research import fetch_site_pages, fetch_company_news, get_company_name
 from cap_931.llm_client import generate_insights
 from cap_931.report_generator import build_docx
+from cap_931.document_reader import read_uploaded_file
 
 st.set_page_config(page_title="Sales Assistant Agent", layout="wide")
 
@@ -85,6 +86,7 @@ if generate:
                 "target_customer": target_customer,
                 "company_url": company_url,
                 "competitors": competitor_list,
+                "product_sheet": read_uploaded_file(uploaded_file) if uploaded_file else "",
             }
             try:
                 with st.spinner("Generating account brief..."):
