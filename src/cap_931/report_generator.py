@@ -15,11 +15,15 @@ FONT = "Arial"
 BODY_PT = 8.5
 
 
-def build_links_section(pages, news):
+def build_links_section(pages, news, filing=None):
     """Build the Article Links section from the sources we actually used."""
     lines = ["## Article Links", "", "**Company pages**"]
     for url in pages:
         lines.append(f"- [{url}]({url})")
+
+    if filing:
+        label = f"{filing['company']} {filing['form']} filed {filing['date']}"
+        lines += ["", "**SEC filing**", f"- [{label}]({filing['url']})"]
 
     if news:
         lines += ["", "**Recent news**"]

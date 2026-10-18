@@ -4,6 +4,7 @@ from cap_931.web_research import fetch_site_pages, fetch_company_news, get_compa
 from cap_931.llm_client import generate_insights
 from cap_931.report_generator import build_docx
 from cap_931.document_reader import read_uploaded_file
+from cap_931.sec_filings import fetch_annual_report
 
 st.set_page_config(page_title="Sales Assistant Agent", layout="wide")
 
@@ -79,6 +80,10 @@ if generate:
             names = [get_company_name(c) for c in competitor_list]
             with st.spinner("Searching recent news..."):
                 news = fetch_company_news(company_url, names, product_category)
+            with st.spinner("Checking the SEC annual report (10-K)..."):
+                filing = fetch_annual_report(company_url, product_category, names)
+            if not filing:
+                st.info("No SEC annual report found (private company, or no match). Continuing without it.")
             inputs = {
                 "product_name": product_name,
                 "product_category": product_category,
@@ -90,7 +95,7 @@ if generate:
             }
             try:
                 with st.spinner("Generating account brief..."):
-                    st.session_state["brief"] = generate_insights(inputs, pages, news)
+                    st.session_state["brief"] = generate_insights(inputs, pages, news, filing)
                     st.session_state["pages"] = pages
                     st.session_state["news"] = news
                     st.session_state["company"] = urlparse(company_url).netloc.replace("www.", "")

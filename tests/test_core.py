@@ -42,3 +42,19 @@ def test_read_uploaded_text_file():
 def test_build_docx_returns_a_word_file():
     data = build_docx("## Company Strategy\nSome text.", "example.com", "Widget")
     assert data[:2] == b"PK"
+
+def test_make_keywords_drops_generic_words():
+    from cap_931.sec_filings import make_keywords
+
+    words = make_keywords("Cybersecurity threat-detection platform", ["crowdstrike"])
+    assert "cybersecurity" in words
+    assert "platform" not in words
+    assert words[-2:] == ["crowdstrike", "competition"]
+
+def test_pick_excerpts_prefers_dense_passages():
+    from cap_931.sec_filings import pick_excerpts
+
+    text = "filler " * 300 + "cyber threat competition crowdstrike " + "filler " * 300
+    excerpts = pick_excerpts(text, ["cyber", "threat", "competition", "crowdstrike"], max_excerpts=1)
+    assert len(excerpts) == 1
+    assert "crowdstrike" in excerpts[0]
