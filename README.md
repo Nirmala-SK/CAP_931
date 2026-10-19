@@ -42,5 +42,10 @@ Python, uv, Streamlit, python-docx, requests, BeautifulSoup, python-dotenv, and 
 - Free-tier rate limits can slow or block requests.
 - Competitor detection is a text match on names found in the sources.
 
+## Documentation and sample outputs
+- `docs/CAP931_Final_Report.pdf` and `docs/CAP931_Final_Report.docx`: the full project report in the PerScholas template
+- `docs/sample_outputs/`: the one-page briefs from each experiment (v1 to v5; v5 is the final version)
+- `docs/sample_inputs/sentinelshield_sheet.txt`: the fictional product overview uploaded to produce the v4 and v5 briefs. SentinelShield is an assumed product, not a real one.
+
 ## Author
 Nirmala Sendilkumar
