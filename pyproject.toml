@@ -1,7 +1,7 @@
 [project]
 name = "cap-931"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI Sales Assistant Agent: researches a prospect's website, news and SEC 10-K filing, then produces a one-page account brief in the PerScholas Word template."
 readme = "README.md"
 authors = [
     { name = "Nirmala-SK", email = "nirmala.sendil@gmail.com" }
@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-cap-931 = "cap_931:main"
+cap-931 = "cap_931.main:main"
 
 [build-system]
 requires = ["uv_build>=0.12.11,<0.13.0"]

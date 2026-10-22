@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from cap-931!")
+"""AI Sales Assistant Agent."""
