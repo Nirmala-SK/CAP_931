@@ -6,6 +6,7 @@ from cap_931.document_reader import read_uploaded_file
 from cap_931.llm_client import generate_report, verify_brief
 from cap_931.report_generator import build_docx
 from cap_931.sec_filings import fetch_annual_report
+from cap_931.validation import validate_inputs
 from cap_931.web_research import (
     fetch_company_news,
     fetch_competitor_pages,
@@ -24,12 +25,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-
-def is_valid_url(url):
-    """Return True if the text looks like a real web address."""
-    parsed = urlparse(url.strip())
-    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
 st.title("Sales Assistant Agent")
@@ -54,25 +49,9 @@ generate = st.button("Generate Insights", type="primary")
 st.subheader("Results")
 
 if generate:
-    errors = []
-
-    if not product_name.strip():
-        errors.append("Product Name is required.")
-    if not is_valid_url(company_url):
-        errors.append("Company URL must be a valid link starting with http:// or https://")
-    if not product_category.strip():
-        errors.append("Product Category is required.")
-    if not value_prop.strip():
-        errors.append("Value Proposition is required.")
-    if not target_customer.strip():
-        errors.append("Target Customer is required.")
-
-    competitor_list = [c.strip() for c in competitors.splitlines() if c.strip()]
-    if not competitor_list:
-        errors.append("Enter at least one competitor URL.")
-    for c in competitor_list:
-        if not is_valid_url(c):
-            errors.append(f"Competitor URL is not valid: {c}")
+    errors, competitor_list = validate_inputs(
+        product_name, company_url, product_category, value_prop, target_customer, competitors
+    )
 
     if errors:
         st.session_state.pop("brief", None)
@@ -138,6 +117,7 @@ if "brief" in st.session_state:
                         st.session_state["draft"], st.session_state["evidence"]
                     )
                 st.rerun()
+
     st.download_button(
         "Download brief (.md)",
         st.session_state["brief"],
@@ -168,6 +148,7 @@ if "brief" in st.session_state:
         file_name="account_brief_deck.pptx",
         mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
+
     with st.expander("Pages read (sources)"):
         for page_url, text in st.session_state["pages"].items():
             st.write(f"- {page_url} ({len(text)} characters)")
