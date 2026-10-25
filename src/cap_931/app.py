@@ -1,10 +1,17 @@
 import streamlit as st
 from urllib.parse import urlparse
-from cap_931.web_research import fetch_site_pages, fetch_company_news, get_company_name
-from cap_931.llm_client import generate_insights
-from cap_931.report_generator import build_docx
+
+from cap_931.deck_generator import build_deck
 from cap_931.document_reader import read_uploaded_file
+from cap_931.llm_client import generate_report, verify_brief
+from cap_931.report_generator import build_docx
 from cap_931.sec_filings import fetch_annual_report
+from cap_931.web_research import (
+    fetch_company_news,
+    fetch_competitor_pages,
+    fetch_site_pages,
+    get_company_name,
+)
 
 st.set_page_config(page_title="Sales Assistant Agent", layout="wide")
 
@@ -69,6 +76,7 @@ if generate:
 
     if errors:
         st.session_state.pop("brief", None)
+        st.session_state.pop("flags", None)
         st.error("Please fix: " + "  •  ".join(errors))
     else:
         with st.spinner("Reading company website pages..."):
@@ -84,6 +92,12 @@ if generate:
                 filing = fetch_annual_report(company_url, product_category, names)
             if not filing:
                 st.info("No SEC annual report found (private company, or no match). Continuing without it.")
+            with st.spinner("Reading competitor websites..."):
+                competitor_pages = fetch_competitor_pages(competitor_list)
+            unreadable = [name for name, comp_pages in competitor_pages.items() if not comp_pages]
+            if unreadable:
+                st.info("Could not read these competitor websites: " + ", ".join(unreadable) + ". Continuing without them.")
+
             inputs = {
                 "product_name": product_name,
                 "product_category": product_category,
@@ -94,10 +108,15 @@ if generate:
                 "product_sheet": read_uploaded_file(uploaded_file) if uploaded_file else "",
             }
             try:
-                with st.spinner("Generating account brief..."):
-                    st.session_state["brief"] = generate_insights(inputs, pages, news, filing)
+                with st.spinner("Generating and fact-checking the account brief..."):
+                    report = generate_report(inputs, pages, news, filing, competitor_pages)
+                    st.session_state["brief"] = report["brief"]
+                    st.session_state["flags"] = report["flags"]
+                    st.session_state["draft"] = report["draft"]
+                    st.session_state["evidence"] = report["evidence"]
                     st.session_state["pages"] = pages
                     st.session_state["news"] = news
+                    st.session_state["competitor_pages"] = competitor_pages
                     st.session_state["company"] = urlparse(company_url).netloc.replace("www.", "")
                     st.session_state["product"] = product_name
             except Exception as error:
@@ -106,6 +125,19 @@ if generate:
 if "brief" in st.session_state:
     st.markdown(st.session_state["brief"])
 
+    flags = st.session_state.get("flags", "")
+    if flags:
+        if flags.strip().startswith("No unsupported claims"):
+            st.success("Fact-check: " + flags.strip())
+        else:
+            st.warning("**Fact-check flags (review before using this brief)**\n\n" + flags)
+        if flags.strip().startswith("The fact-check could not run"):
+            if st.button("Re-run fact-check"):
+                with st.spinner("Re-running the fact-check..."):
+                    st.session_state["flags"] = verify_brief(
+                        st.session_state["draft"], st.session_state["evidence"]
+                    )
+                st.rerun()
     st.download_button(
         "Download brief (.md)",
         st.session_state["brief"],
@@ -125,9 +157,23 @@ if "brief" in st.session_state:
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 
+    st.download_button(
+        "Download meeting deck (.pptx)",
+        build_deck(
+            st.session_state["brief"],
+            st.session_state["company"],
+            st.session_state["product"],
+            "Nirmala Sendilkumar",
+        ),
+        file_name="account_brief_deck.pptx",
+        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
     with st.expander("Pages read (sources)"):
         for page_url, text in st.session_state["pages"].items():
             st.write(f"- {page_url} ({len(text)} characters)")
+        for name, comp_pages in st.session_state.get("competitor_pages", {}).items():
+            for page_url, text in comp_pages.items():
+                st.write(f"- {name}: {page_url} ({len(text)} characters)")
         for a in st.session_state.get("news", []):
             st.write(f"- {a['date'][:16]} | {a['source']} | {a['title']}")
 elif not generate:

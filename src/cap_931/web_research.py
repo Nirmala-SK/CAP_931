@@ -1,12 +1,13 @@
 import re
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse, urljoin, quote_plus
+from urllib.parse import quote_plus, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; SalesAssistantBot/1.0; student project)"}
 KEYWORDS = ["news", "press", "media", "career", "leadership", "investor", "strategy", "insights"]
+COMPETITOR_KEYWORDS = ["product", "platform", "solution", "security", "about", "news", "press", "customer"]
 
 
 def fetch_page_text(url, max_chars=5000):
@@ -39,8 +40,9 @@ def find_mentions(text, names):
     return {name: squashed.count(name) for name in names}
 
 
-def find_relevant_links(url, max_links=5):
-    """Find links on a page that point to news, careers, leadership, etc."""
+def find_relevant_links(url, max_links=5, keywords=None):
+    """Find links on a page whose text or address contains one of the keywords."""
+    keywords = keywords or KEYWORDS
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
         response.raise_for_status()
@@ -57,7 +59,7 @@ def find_relevant_links(url, max_links=5):
         if urlparse(link).netloc != site or link == url or link in found:
             continue
         label = (a.get_text(" ", strip=True) + " " + link).lower()
-        if any(word in label for word in KEYWORDS):
+        if any(word in label for word in keywords):
             found.append(link)
         if len(found) >= max_links:
             break
@@ -65,12 +67,25 @@ def find_relevant_links(url, max_links=5):
     return found
 
 
-def fetch_site_pages(url, max_pages=5):
+def fetch_site_pages(url, max_pages=5, keywords=None):
     """Return {page_url: text} for the homepage plus a few relevant pages."""
     pages = {url: fetch_page_text(url, max_chars=20000)}
-    for link in find_relevant_links(url, max_pages):
+    for link in find_relevant_links(url, max_pages, keywords):
         pages[link] = fetch_page_text(link, max_chars=20000)
     return {u: t for u, t in pages.items() if t}
+
+
+def fetch_competitor_pages(competitor_urls, max_pages=2, max_chars=4000):
+    """Read each competitor's homepage and a few product, security and news pages.
+
+    Returns {competitor_name: {page_url: text}}. A competitor whose site blocks
+    us simply gets an empty dictionary.
+    """
+    result = {}
+    for url in competitor_urls:
+        pages = fetch_site_pages(url, max_pages, COMPETITOR_KEYWORDS)
+        result[get_company_name(url)] = {u: t[:max_chars] for u, t in pages.items()}
+    return result
 
 
 def fetch_news(query, max_items=8):
@@ -113,5 +128,8 @@ def fetch_company_news(company_url, competitor_names, topic, max_per_query=5):
 
 
 if __name__ == "__main__":
-    for a in fetch_news("JPMorgan Chase cybersecurity when:1y", 3):
-        print(a["date"], "|", a["source"], "|", a["title"])
+    result = fetch_competitor_pages(["https://www.crowdstrike.com", "https://www.paloaltonetworks.com"])
+    for name, pages in result.items():
+        print(name)
+        for page_url, text in pages.items():
+            print("  ", len(text), page_url)

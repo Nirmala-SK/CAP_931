@@ -2,6 +2,7 @@ import io
 import re
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse
 
 from docx import Document
 from docx.enum.text import WD_UNDERLINE
@@ -15,7 +16,7 @@ FONT = "Arial"
 BODY_PT = 8.5
 
 
-def build_links_section(pages, news, filing=None):
+def build_links_section(pages, news, filing=None, competitor_pages=None):
     """Build the Article Links section from the sources we actually used."""
     lines = ["## Article Links", "", "**Company pages**"]
     for url in pages:
@@ -24,6 +25,13 @@ def build_links_section(pages, news, filing=None):
     if filing:
         label = f"{filing['company']} {filing['form']} filed {filing['date']}"
         lines += ["", "**SEC filing**", f"- [{label}]({filing['url']})"]
+
+    if competitor_pages:
+        lines += ["", "**Competitor pages**"]
+        for name, comp_pages in competitor_pages.items():
+            for url in comp_pages:
+                path = urlparse(url).path or "/"
+                lines.append(f"- [{name}: {path}]({url})")
 
     if news:
         lines += ["", "**Recent news**"]
@@ -85,6 +93,32 @@ def _spacing(paragraph, before=0, after=2):
 
 
 MAX_NEWS_IN_DOCX = 5
+SECTION_CAPS = {"**Recent news**": MAX_NEWS_IN_DOCX}
+# These link lists are written on one line each in the Word file to save space.
+INLINE_SECTIONS = {"**Company pages**": "Company pages", "**Competitor pages**": "Competitor pages"}
+
+
+def _short_label(url, name=""):
+    """Turn a web address into a short readable label."""
+    path = urlparse(url).path.strip("/")
+    last = path.split("/")[-1] if path else ""
+    text = last.replace("-", " ").replace("_", " ").title() if last else "Home"
+    if len(text) > 26:
+        text = text[:25].rstrip() + "\u2026"
+    return f"{name}: {text}" if name else text
+
+
+def _flush_links(doc, title, links):
+    """Write collected links as one paragraph: Title:  link | link | link."""
+    if not title or not links:
+        return
+    p = doc.add_paragraph()
+    _style_run(p.add_run(f"{title}:  "), BODY_PT, bold=True)
+    for k, (label, url) in enumerate(links):
+        if k:
+            _style_run(p.add_run("  |  "), BODY_PT)
+        _add_hyperlink(p, label, url)
+    _spacing(p, 0, 2)
 
 
 def _remove_template_notes(doc):
@@ -122,20 +156,44 @@ def build_docx(brief_markdown, company_name, product_name, author=""):
     _style_run(sub.add_run(byline), 8.5, italic=True)
     _spacing(sub, 0, 4)
 
-    in_news = False
-    news_shown = 0
+    current_cap = None
+    shown = 0
+    inline_title = None
+    inline_links = []
+    last_name = ""
 
     for raw in brief_markdown.splitlines():
         line = raw.rstrip()
         if not line.strip():
             continue
-        if line.strip() == "**Recent news**":
-            in_news = True
+        stripped = line.strip()
+        is_bold_heading = stripped.startswith("**") and stripped.endswith("**")
+
+        if is_bold_heading or line.startswith("## "):
+            _flush_links(doc, inline_title, inline_links)
+            inline_title, inline_links, last_name = None, [], ""
+
+        if is_bold_heading:
+            current_cap = SECTION_CAPS.get(stripped)
+            shown = 0
+            if stripped in INLINE_SECTIONS:
+                inline_title = INLINE_SECTIONS[stripped]
+                continue
+
         is_bullet = bool(re.match(r"^\s*[*-]\s+", line))
 
-        if in_news and is_bullet:
-            news_shown += 1
-            if news_shown > MAX_NEWS_IN_DOCX:
+        if inline_title and is_bullet:
+            match = re.match(r"^\s*[*-]\s+\[(.+?)\]\((.+?)\)", line)
+            if match:
+                label, url = match.groups()
+                name = label.split(":")[0] if inline_title == "Competitor pages" else ""
+                inline_links.append((_short_label(url, name if name != last_name else ""), url))
+                last_name = name
+                continue
+
+        if current_cap is not None and is_bullet:
+            shown += 1
+            if shown > current_cap:
                 continue
 
         if line.startswith("## "):
@@ -154,6 +212,8 @@ def build_docx(brief_markdown, company_name, product_name, author=""):
             p = doc.add_paragraph()
             _add_inline(p, line.strip())
             _spacing(p, 0, 2)
+
+    _flush_links(doc, inline_title, inline_links)
 
     buffer = io.BytesIO()
     doc.save(buffer)
